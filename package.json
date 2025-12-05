@@ -1,6 +1,6 @@
 {
   "name": "koishi-plugin-arcade-queue",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "基于 DeepSeek 制作的 QQ 群机厅排队管理系统，支持别名查询、数据绑定和权限管理",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
