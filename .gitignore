@@ -1,0 +1,13 @@
+# 依赖目录
+node_modules/
+
+# 构建输出目录
+lib/
+
+# 构建缓存文件
+tsconfig.tsbuildinfo
+
+# 编辑器/系统文件
+.DS_Store
+Thumbs.db
+*.log
