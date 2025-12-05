@@ -1,0 +1,32 @@
+{
+  "name": "koishi-plugin-arcade-queue",
+  "version": "2.0.0",
+  "description": "基于 DeepSeek 制作的 QQ 群机厅排队管理系统，支持别名查询、数据绑定和权限管理",
+  "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "keywords": [
+    "koishi",
+    "plugin",
+    "arcade",
+    "queue",
+    "机厅",
+    "排队",
+    "QQ群",
+    "qq",
+    "多群聊",
+    "onebot"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "peerDependencies": {
+    "koishi": "^4.14.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch",
+    "clean": "rm -rf lib"
+  }
+}
