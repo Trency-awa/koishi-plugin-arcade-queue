@@ -36,5 +36,16 @@ declare module "koishi" {
       createdAt: Date;
       updatedAt: Date;
     };
+    // 新增白名单表
+    white_list: {
+      id: number;
+      userId: string;
+      userName: string;
+      groupId: string;
+      addedBy: string;
+      addedByName: string;
+      createdAt: Date;
+      updatedAt: Date;
+    };
   }
 }
