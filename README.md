@@ -1,4 +1,4 @@
-# Koishi 机厅排队管理插件 v2.1.1
+# Koishi 机厅排队管理插件 v2.2.0
 
 ![Koishi](https://img.shields.io/badge/Koishi-4.x-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
@@ -313,7 +313,7 @@ src/
 
 ## 📝 更新日志
 
-### v2.1.1 (当前版本)
+### v2.2.0 (当前版本)
 
 - **优化**：清理调试代码，移除临时调试命令
 - **完善**：README 文档，添加详细的使用说明
