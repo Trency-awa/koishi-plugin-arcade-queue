@@ -26,7 +26,7 @@ export const Config = Schema.object({
     .description("每个机厅最大别名数量"),
 
   adminRoles: Schema.array(Schema.string())
-    .default(["admin", "owner"])
+    .default(["admin", "owner", "2", "4"]) // 添加 "2" 和 "4" 对应QQ平台的roles值
     .description("管理员角色（需要管理员权限的操作：重置、绑定等）"),
 
   resetConfirmationText: Schema.string()
@@ -43,6 +43,13 @@ export const Config = Schema.object({
   whiteListRequireAdmin: Schema.boolean()
     .default(true)
     .description("白名单管理需要管理员权限（关闭则任何人都可管理白名单）"),
+
+  // 新增：群主用户ID列表（格式：平台:用户ID）
+  groupOwners: Schema.array(Schema.string())
+    .default([])
+    .description(
+      "指定群主用户ID列表（格式：qq:用户ID），用于无法通过API识别群主的情况"
+    ),
 });
 
 export const inject = ["database"];
@@ -57,6 +64,7 @@ export interface Config {
   resetConfirmationText: string;
   enableWhiteList: boolean;
   whiteListRequireAdmin: boolean;
+  groupOwners: string[]; // 新增
 }
 
 export interface Arcade {

@@ -1,4 +1,4 @@
-# Koishi 机厅排队管理插件（QQ 群版）v2.1.0
+# Koishi 机厅排队管理插件 v2.1.1
 
 ![Koishi](https://img.shields.io/badge/Koishi-4.x-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
@@ -139,7 +139,7 @@ plugins:
 
 ```bash
 # 绑定其他QQ群（需要权限）
-机厅绑定 onebot:123456789 -e
+机厅绑定 onebot:1234567890 -e
 
 # 解绑群聊（需要权限）
 机厅解绑
@@ -312,6 +312,12 @@ src/
 3. **命令无效**：检查插件是否正常加载和配置
 
 ## 📝 更新日志
+
+### v2.1.1 (当前版本)
+
+- **优化**：清理调试代码，移除临时调试命令
+- **完善**：README 文档，添加详细的使用说明
+- **修复**：权限检查逻辑，提升稳定性
 
 ### v2.1.0
 

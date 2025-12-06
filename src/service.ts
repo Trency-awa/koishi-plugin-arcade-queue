@@ -94,7 +94,7 @@ export class ArcadeService extends Service {
       }
     );
 
-    // 新增：定义 white_list 表
+    // 定义 white_list 表
     this.ctx.model.extend(
       "white_list",
       {
@@ -118,7 +118,7 @@ export class ArcadeService extends Service {
   // ==================== 通用方法 ====================
 
   // 获取当前QQ群ID
-  getGroupId(session: any): string {
+  public getGroupId(session: any): string {
     if (!session) return "unknown:unknown";
     return `${session.platform}:${
       session.guildId || session.channelId || "private"
@@ -126,40 +126,260 @@ export class ArcadeService extends Service {
   }
 
   // 获取用户ID
-  private getUserId(session: any): string {
+  public getUserId(session: any): string {
     if (!session) return "system";
     return `${session.platform}:${session.userId}`;
   }
 
   // 格式化时间
-  formatDateTime(date: Date): string {
+  public formatDateTime(date: Date): string {
     return date.toISOString().replace("T", " ").substring(0, 19);
+  }
+
+  // 获取平台信息
+  public getPlatformInfo(session: any): string {
+    if (!session) return "未知";
+
+    const groupId = this.getGroupId(session);
+    let platformType = "未知";
+
+    if (session.guildId) {
+      if (
+        session.guildId.includes("guild_") ||
+        session.guildId.includes("group_")
+      ) {
+        platformType = "QQ频道";
+      } else if (
+        session.platform === "qq" &&
+        /^[A-F0-9]{32}$/.test(session.guildId)
+      ) {
+        platformType = "QQ群（开放平台）";
+      } else {
+        platformType = "QQ群";
+      }
+    }
+
+    return platformType;
+  }
+
+  // 获取身份组映射说明
+  public getRoleMapping(): string {
+    return `🎮 身份组系统说明：
+
+📱 QQ频道（支持API自动识别）：
+  1: 全体成员
+  2: 管理员
+  4: 群主/创建者
+  5: 子频道管理员
+
+👥 QQ群（需要配置指定群主）：
+  • API无法自动识别群主身份
+  • 需要在配置文件中指定群主
+  • 格式: "qq:用户ID"
+  • 示例: "qq:159411E004A1886B1E2083DCE2250CAA"
+
+💡 如何获取用户ID？
+  使用命令：权限检查
+  或在配置中查看用户ID`;
+  }
+
+  // ==================== 平台检测方法 ====================
+
+  // 检测是否为QQ频道
+  private isQQGuild(groupId: string): boolean {
+    return (
+      groupId.includes("guild_") ||
+      groupId.includes("group_") ||
+      (groupId.includes("qq:") &&
+        (groupId.includes("guild_") || groupId.includes("group_")))
+    );
+  }
+
+  // 检测是否为QQ群
+  private isQQGroup(groupId: string): boolean {
+    return !this.isQQGuild(groupId);
   }
 
   // ==================== 权限检查方法 ====================
 
-  // 检查用户是否为群主
+  // 统一的群主检查方法，根据平台类型使用不同的策略
   async isGroupOwner(session: any): Promise<boolean> {
+    const userId = this.getUserId(session);
+    const groupId = this.getGroupId(session);
+
+    // 1. 首先检查是否在配置的群主列表中（最高优先级）
+    if (this.config.groupOwners && this.config.groupOwners.includes(userId)) {
+      this.ctx.logger.info(`用户 ${userId} 在配置的群主列表中`);
+      return true;
+    }
+
+    // 2. 如果没有session必要参数，直接返回false
     if (!session?.bot || !session.guildId || !session.userId) {
       return false;
     }
 
+    // 3. 根据平台类型使用不同的检查策略
+    if (this.isQQGuild(session.guildId)) {
+      // QQ频道：使用API检查roles数组
+      return await this.checkQQGuildOwner(session);
+    } else {
+      // QQ群：使用备用检查策略
+      return await this.checkQQGroupOwner(session);
+    }
+  }
+
+  // QQ频道的群主检查（使用API的roles数组）
+  private async checkQQGuildOwner(session: any): Promise<boolean> {
     try {
+      // 获取成员信息
       const member = await session.bot.getGuildMember(
         session.guildId,
         session.userId
       );
-      if (!member) return false;
 
-      return member.role === "owner";
-    } catch (error) {
-      this.ctx.logger.warn("检查群主权限失败:", error);
+      if (!member) {
+        this.ctx.logger.warn(
+          `获取QQ频道成员信息为空: guildId=${session.guildId}, userId=${session.userId}`
+        );
+        return false;
+      }
+
+      this.ctx.logger.debug(`QQ频道成员信息: ${JSON.stringify(member)}`);
+
+      // 根据官方API文档检查 roles 数组
+      if (member.roles && Array.isArray(member.roles)) {
+        // roles 数组中的元素是字符串，如 ["1", "2", "4"] 等
+        const isOwner = member.roles.includes("4");
+        this.ctx.logger.info(
+          `QQ频道检查 roles 数组: ${JSON.stringify(
+            member.roles
+          )}, 包含群主(4): ${isOwner}`
+        );
+        return isOwner;
+      }
+
+      // 兼容性检查：检查 role 字段
+      if (member.role === "4" || member.role === 4) {
+        this.ctx.logger.info(
+          `QQ频道用户 ${session.userId} 是群主 (role字段为"4")`
+        );
+        return true;
+      }
+
+      this.ctx.logger.warn(
+        `QQ频道用户 ${session.userId} 不是群主，roles: ${JSON.stringify(
+          member.roles
+        )}, role: ${member.role}`
+      );
+      return false;
+    } catch (error: any) {
+      this.ctx.logger.error(`QQ频道检查群主权限失败: ${error.message}`);
       return false;
     }
   }
 
+  // QQ群的群主检查（使用备用策略）
+  private async checkQQGroupOwner(session: any): Promise<boolean> {
+    const userId = this.getUserId(session);
+
+    // QQ群的备用检查策略
+    this.ctx.logger.info(`QQ群使用备用策略检查群主身份: ${userId}`);
+
+    // 策略1: 尝试通过Bot API获取成员信息（可能有限制）
+    try {
+      const member = await session.bot.getGuildMember(
+        session.guildId,
+        session.userId
+      );
+
+      if (member) {
+        this.ctx.logger.debug(`QQ群成员信息: ${JSON.stringify(member)}`);
+
+        // 检查可能的群主标识
+        if (member.role === "owner" || member.role === "群主") {
+          this.ctx.logger.info(
+            `QQ群用户 ${session.userId} 是群主 (role=owner)`
+          );
+          return true;
+        }
+
+        if (member.authority === 3) {
+          this.ctx.logger.info(
+            `QQ群用户 ${session.userId} 是群主 (authority=3)`
+          );
+          return true;
+        }
+
+        // 检查其他可能的字段
+        const ownerFields = [
+          "is_owner",
+          "owner",
+          "isOwner",
+          "is_creator",
+          "creator",
+        ];
+        for (const field of ownerFields) {
+          if (member[field] === true || member[field] === 1) {
+            this.ctx.logger.info(
+              `QQ群用户 ${session.userId} 是群主 (${field}=true)`
+            );
+            return true;
+          }
+        }
+      }
+    } catch (error: any) {
+      this.ctx.logger.debug(
+        `QQ群获取成员信息失败，继续使用其他策略: ${error.message}`
+      );
+    }
+
+    // 策略2: 检查是否有其他API可用
+    try {
+      // 尝试获取群信息，检查owner_id
+      if (session.bot.getGuild) {
+        const guild = await session.bot.getGuild(session.guildId);
+        if (guild && guild.owner_id) {
+          const isOwner = guild.owner_id === session.userId;
+          this.ctx.logger.info(
+            `QQ群通过owner_id检查: ${guild.owner_id} === ${session.userId} = ${isOwner}`
+          );
+          return isOwner;
+        }
+      }
+    } catch (error: any) {
+      this.ctx.logger.debug(`QQ群获取群信息失败: ${error.message}`);
+    }
+
+    // 策略3: 基于配置的备用检查（已在isGroupOwner方法中检查）
+
+    // 策略4: 基于QQ号的检查（最后的手段）
+    const qqNumber = this.extractQQNumber(session.userId);
+    if (qqNumber) {
+      // 这里可以添加基于QQ号的检查逻辑
+      const ownerQQNumbers: string[] = [
+        // 可以在这里添加已知的群主QQ号
+      ];
+
+      if (ownerQQNumbers.includes(qqNumber)) {
+        this.ctx.logger.info(`QQ群基于QQ号识别为群主: ${qqNumber}`);
+        return true;
+      }
+    }
+
+    this.ctx.logger.warn(
+      `QQ群用户 ${userId} 无法确定为群主，请使用配置方式指定`
+    );
+    return false;
+  }
+
   // 检查用户是否为管理员（包括群主）
   async checkAdminPermission(session: any): Promise<boolean> {
+    // 1. 如果是群主，直接返回 true
+    if (await this.isGroupOwner(session)) {
+      return true;
+    }
+
+    // 2. 尝试通过API获取成员信息
     if (!session?.bot || !session.guildId || !session.userId) {
       return false;
     }
@@ -169,10 +389,48 @@ export class ArcadeService extends Service {
         session.guildId,
         session.userId
       );
+
       if (!member) return false;
 
-      return this.config.adminRoles.includes(member.role);
-    } catch (error) {
+      // 根据平台类型使用不同的检查策略
+      if (this.isQQGuild(session.guildId)) {
+        // QQ频道：检查roles数组
+        if (member.roles && Array.isArray(member.roles)) {
+          const isAdmin =
+            member.roles.includes("2") || member.roles.includes("4");
+          this.ctx.logger.info(
+            `QQ频道检查管理员 roles: ${JSON.stringify(
+              member.roles
+            )}, 是管理员: ${isAdmin}`
+          );
+          return isAdmin;
+        }
+      } else {
+        // QQ群：检查role字段或其他标识
+        if (
+          member.role === "2" ||
+          member.role === 2 ||
+          member.role === "admin" ||
+          member.role === "管理员"
+        ) {
+          return true;
+        }
+
+        if (member.authority === 2) {
+          return true;
+        }
+      }
+
+      // 检查配置中的管理员角色
+      if (
+        member.role &&
+        this.config.adminRoles.includes(member.role.toString())
+      ) {
+        return true;
+      }
+
+      return false;
+    } catch (error: any) {
       this.ctx.logger.warn("检查管理员权限失败:", error);
       return false;
     }
@@ -194,6 +452,7 @@ export class ArcadeService extends Service {
 
     // 1. 群主永远有权限
     if (await this.isGroupOwner(session)) {
+      this.ctx.logger.info(`用户 ${userId} 是群主，权限已通过`);
       return true;
     }
 
@@ -204,6 +463,44 @@ export class ArcadeService extends Service {
     } else {
       // 白名单关闭：检查是否为管理员
       return await this.checkAdminPermission(session);
+    }
+  }
+
+  // ==================== 辅助方法 ====================
+
+  // 从用户ID中提取QQ号
+  private extractQQNumber(userId: string): string | null {
+    // 格式可能是 "qq:123456789" 或 "123456789" 或其他
+    if (userId.includes(":")) {
+      const parts = userId.split(":");
+      if (parts.length >= 2) {
+        const idPart = parts[1];
+        // 检查是否是纯数字（QQ号）
+        if (/^\d+$/.test(idPart)) {
+          return idPart;
+        }
+      }
+    } else if (/^\d+$/.test(userId)) {
+      return userId;
+    }
+    return null;
+  }
+
+  // 获取完整的成员信息（调试用）
+  async getMemberDetail(session: any): Promise<any> {
+    if (!session?.bot || !session.guildId || !session.userId) {
+      return null;
+    }
+
+    try {
+      const member = await session.bot.getGuildMember(
+        session.guildId,
+        session.userId
+      );
+      return member;
+    } catch (error) {
+      this.ctx.logger.error(`获取成员信息失败: ${error}`);
+      return null;
     }
   }
 

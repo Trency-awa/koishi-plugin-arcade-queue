@@ -151,6 +151,10 @@ export function applyCommands(ctx: Context, config: Config) {
 
         let status = "📊 机厅系统状态\n";
         status += "================\n";
+
+        // 添加平台信息
+        const platformInfo = ctx.arcade.getPlatformInfo(session);
+        status += `当前平台: ${platformInfo}\n`;
         status += `当前QQ群: ${groupId}\n`;
         status += `本群机厅数: ${localArcades.length}\n`;
 
@@ -176,6 +180,31 @@ export function applyCommands(ctx: Context, config: Config) {
           }\n`;
         }
 
+        // 显示群主配置信息
+        if (config.groupOwners && config.groupOwners.length > 0) {
+          status += `\n👑 配置的群主数: ${config.groupOwners.length} 人\n`;
+          // 检查当前用户是否在群主列表中
+          const userId = ctx.arcade.getUserId(session);
+          const isInOwnerList = config.groupOwners.includes(userId);
+          status += `当前用户是否在群主列表中: ${
+            isInOwnerList ? "✅ 是" : "❌ 否"
+          }\n`;
+
+          // 只显示前3个，避免信息过长
+          const displayOwners = config.groupOwners.slice(0, 3);
+          displayOwners.forEach((owner, index) => {
+            status += `  ${index + 1}. ${owner}\n`;
+          });
+          if (config.groupOwners.length > 3) {
+            status += `  ... 等 ${config.groupOwners.length} 个群主\n`;
+          }
+        } else {
+          status += `\n⚠️ 未配置群主列表\n`;
+          if (platformInfo.includes("QQ群")) {
+            status += `💡 在QQ群中使用时，需要在配置中指定群主\n`;
+          }
+        }
+
         status += `\n📅 自动清零时间: 每天 ${config.autoResetTime}\n`;
         status += `🔄 清零更新者: ${config.resetUpdater}\n`;
         status += `🏷️ 最大别名数量: ${config.maxAliasesPerArcade}个/机厅\n`;
@@ -190,6 +219,31 @@ export function applyCommands(ctx: Context, config: Config) {
           status += `\n💡 当前权限模式: 白名单已禁用\n`;
           status += `   - 群主和管理员可以: 添加机厅、绑定/解绑群聊、重置数据\n`;
           status += `   - 所有人都可以: 查询机厅、更新人数、查看报告`;
+        }
+
+        // 当前用户权限状态
+        try {
+          const isOwner = await ctx.arcade.isGroupOwner(session);
+          const isAdmin = await ctx.arcade.checkAdminPermission(session);
+          const hasPermission = await ctx.arcade.checkPermission(session);
+
+          status += `\n\n🔍 当前用户权限状态:\n`;
+          status += `  是否为群主: ${isOwner ? "✅ 是" : "❌ 否"}\n`;
+          status += `  是否为管理员: ${isAdmin ? "✅ 是" : "❌ 否"}\n`;
+          status += `  是否有B类操作权限: ${
+            hasPermission ? "✅ 有" : "❌ 无"
+          }\n`;
+
+          // 平台特定建议
+          if (platformInfo.includes("QQ群") && !isOwner && !hasPermission) {
+            status += `\n⚠️ QQ群权限提示:\n`;
+            status += `   QQ群无法通过API自动识别群主身份\n`;
+            status += `   如需获得权限，请在配置中添加群主用户ID\n`;
+            status += `   你的用户ID: ${ctx.arcade.getUserId(session)}\n`;
+            status += `   配置格式: groupOwners: ["qq:你的用户ID"]`;
+          }
+        } catch (error) {
+          // 忽略权限检查错误，不影响主要功能
         }
 
         return status;
